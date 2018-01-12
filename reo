@@ -1,7 +1,7 @@
 
 %% PVS Version 6.0 - International Allegro CL Enterprise Edition 9.0 [Linux (x86)] (Jan 14, 2013 3:16)
 %% 9.0 [Linux (x86)] (Jan 14, 2013 3:16)
-$$$reo.pvs
+$$$reo1.pvs
 reo: THEORY 
 BEGIN 
 
@@ -18,7 +18,8 @@ Input, T1, T2, TD, Output: VAR TD;
 pair: TYPE = [A,T]
 
 <: (strict_order?[sequence[Time]])
->: (strict_order?[sequence[Time]]) = LAMBDA (s1, s2: sequence[Time]): s2 < s1
+>: (strict_order?[sequence[Time]]) = 
+     LAMBDA (s1, s2: sequence[Time]): s2 < s1
 
 DrT:[pair -> A]; 
 TrD:[pair -> T]; 
@@ -27,11 +28,11 @@ e?(T1)(e:Data): bool = FORALL (a: Data,t:Time): DrT(a,t)=e;
 a?(T1):bool =  FORALL (a: Data,t:Time): DrT(a,t)=a;
 t?(T1):bool =  FORALL (a: Data,t:Time): TrD(a,t)=t;
 
-Teq(T1,T2): bool = T(T1) = T(T2)
-Tle(T1,T2): bool = T(T1) < T(T2)
-Tgt(T1,T2): bool = T(T1) > T(T2)
-Tneq(T1,T2): bool = T(T1) /= T(T2)  
-Deq(T1, T2): bool= D(T1) = D(T2);
+Teq(Input,Output): bool = T(Input) = T(Output)
+Tle(Input,Output): bool = T(Input) < T(Output)
+Tgt(Input, Output): bool = T(Input) > T(Output)
+Tneq(Input,Output): bool = T(Input) /= T(Output)  
+Deq(Input, Output): bool= D(Input) = D(Output);
 
 seq: var sequence[Data];
 i, n: var nat;
@@ -49,18 +50,12 @@ Sync(Input, Output): bool = Teq(Input, Output) &
 
 SyncD(Input, Output): bool = Teq(Input, Output)
 
-Filter(Input, Output)(pat): INDUCTIVE bool= if 
-	       a?(Input) = member(pat) THEN 
-	      		    Teq(Input, Output) & Deq(Input, Output)
-                           & Filter(next(Input), next(Output))(pat) 
-                          ELSE Filter(next(Input), Output)(pat) ENDIF
-
-Filter1(Input, Output)(pat): INDUCTIVE bool= 
-	                a?(Input) = member(pat) IMPLIES 
-                          (Teq(Input, Output) & Deq(Input, Output)
-                           & Filter(next(Input), next(Output))(pat))
-                          and  a?(Input) = member(pat) IMPLIES (
-                                   Filter(next(Input), Output)(pat))
+Filter(Input, Output)(pat): INDUCTIVE bool= 
+	         a?(Input) = member(pat) IMPLIES 
+                  Teq(Input, Output) & Deq(Input, Output)
+                   & (Filter(next(Input), next(Output))(pat))
+                  and  (a?(Input) /= member(pat) IMPLIES 
+                             Filter(next(Input), Output)(pat))
 
 Producer(Input, Output)(pat): bool = member(pat) & 
 			      	   Teq(Input, Output)
@@ -70,27 +65,25 @@ Fifo1(Input, Output): bool = Tle(Input, Output) &
 			     Deq(Input, Output)
 
 Fifo1e(Input, Output)(e:Data)(n:nat): bool = Tgt(Input, Output) & 
-                        Tle(Input,next(Output))  & e?(nth(Output,n))(e)
+                   Tle(Input,next(Output))  & e?(nth(Output,n))(e)
 			     & Deq(Input, (next(Output)))
 
 Fifon(Input, Output: TD)(n:posnat): Recursive bool = IF n=1 Then 
-Fifo1(Input, Output) ELSE
-  EXISTS(s3:TD): Fifon(Input, s3)(n-1) AND Fifo1(s3, Output) ENDIF MEasure n
+                    Fifo1(Input, Output) ELSE 
+                 EXISTS(s3:TD): Fifon(Input, s3)(n-1) 
+               AND Fifo1(s3, Output) ENDIF MEasure n
 
 Lossysync(Input, Output)(n:nat): INDUCTIVE bool = 
-		 		 Lossysync(next(Input), next(Output))(n) 
-				& nth(Output,n)= nth(Input,n) 
-				 OR Lossysync(next(Input), Output)(n)
+		 Lossysync(next(Input), next(Output))(n) 
+	         & nth(Output,n)= nth(Input,n) 
+		 OR Lossysync(next(Input), Output)(n)
 
 ASD(Input, Output)(n:nat): INDUCTIVE bool=
-	   	    	      (NOT a?(nth(Input,n))) =  a?(nth(Output, n))
-			      & a?(nth(Input,n)) < a?(nth(Output, n))
-			      & ASD((next(Input), Output))(n)
-			      & a?(nth(Input,n))> a?(nth(Output, n))
-			      & ASD(Input, next(Output))(n)
-
-
-
+	   	 (NOT a?(nth(Input,n))) =  a?(nth(Output, n))
+	     & a?(nth(Input,n)) < a?(nth(Output, n))
+	     & ASD((next(Input), Output))(n)
+	     & a?(nth(Input,n)) > a?(nth(Output, n))
+	     & ASD(Input, next(Output))(n)
 
 Join(Input,Output): bool = Input=Output
 
@@ -103,11 +96,11 @@ Merge(s1, s2,s3)(n:nat): INDUCTIVE bool =
   AND (
         ((a?(nth(s1,n)) < (a?(nth(s2,n)))) IMPLIES
     nth(s3,n)= nth(s1,n))
-    AND Merge(next(s1), s2, next(s3))(n))
+    & Merge(next(s1), s2, next(s3))(n))
   AND (
         ((a?(nth(s1,n)) > (a?(nth(s2,n)))) IMPLIES
         nth(s3,n)= nth(s2,n))
-        AND Merge(s1, next(s2), next(s3))(n))
+        & Merge(s1, next(s2), next(s3))(n))
 
 trans_equal: LEMMA Teq(s1,s2) AND Teq(s2,s3) IMPLIES Teq(s1,s3)
 
@@ -119,24 +112,34 @@ trans_equal5: LEMMA Tgt(s1,s2) AND Tgt(s2,s3) IMPLIES Tgt(s1,s3)
 
 trans_equal6: LEMMA Deq(s1,s2) AND Deq(s2,s3) IMPLIES Deq(s1,s3)
 
-T1: THEOREM Sync(A,B) & Fifo1(A,C) IMPLIES Tle(A,C) & Teq(A,B) &  Deq(A,C)
+T1: THEOREM Sync(A,B) & Fifo1(B,C) IMPLIES Tle(A,C) & Teq(A,B) &  Deq(A,C)
 
-fto: lemma Sync(A,B) & Join(B,C) and Sync(C,D) IMPLIES Teq(A,D) and Deq(A,D)
+fto: THEOREM Sync(A,B) & Join(B,C) and Sync(C,D) IMPLIES Teq(A,D) and Deq(A,D)
 
-tcr: lemma Sync(A,B) and Join(B,C) & Join(B,E) AND Sync(E,F) AND Sync(C,D) 
-IMPLIES Teq(A,F) and Teq(A,D) and Deq(A,F) and Deq(A,D)
+tcr: THEOREM Sync(A,B) and Join(B,C) & Join(B,E) AND Sync(E,F) AND Sync(C,D) 
+IMPLIES Teq(A,F) and Teq(A,D) and Deq(A,F) and Deq(A,D) and Deq(A,F)
 
-wcr: THEOREM Sync(A,B) AND Join(B, C) and Join(B, E) AND SyncD(E,F) AND Sync(C,D) 
-IMPLIES Teq(A,D) and Deq(A,D) and Teq(D,F)
+wcr: THEOREM Sync(A,B) AND Join(B, C) and Join(B, E) AND SyncD(E,F) AND 
+  Sync(C,D) IMPLIES Teq(A,D) and Deq(A,D)
 
-ex52: THEOREM  Sync(A,G) & Lossysync(G,D)(n) & Lossysync(G,E)(n) & SyncD(G,F) 
-& Sync(D,F) and Sync(E,F) & Sync(D,B) & Sync(E,C) IMPLIES
-Teq(A,C) OR Teq(A,D)  %OR (Teq(A,B) & Deq(A,B))
+ex52: THEOREM  Sync(A,G) & Lossysync(G,D)(n) & Lossysync(G,E)(n) & 
+SyncD(G,F) & Sync(D,F) and Sync(E,F) & Sync(D,B) & Sync(E,C) IMPLIES
+Teq(A,C) OR Teq(A,D) 
+
+ex52new: THEOREM  Sync(A,G) & Lossysync(G,D)(n) & 
+Lossysync(G,E)(n) & SyncD(G,F) & Sync(D,F) & Sync(E,F) & 
+Sync(D,B) & Sync(E,C) IMPLIES
+Teq(A,C) OR Teq(A,D) 
+
+sequencer(A, G):bool= FORALL(B,C,D,E,F:TD, e:Data, n:nat): 
+Fifo1e(A,B)(e)(n) & Sync(B,E) & Fifo1(B,C) &
+Sync(C,F) & Fifo1(C,D) & Sync(D, G) & Sync(D,A)
+
+seq: THEoREM sequencer(A,G) IMPLIES Tle(G, next(E)) and Tle(E,F) & Tle(F,G) & Deq(E,F) and Deq(F,G)
 
 lemma7: LEMMA A=B IMPLIES Sync(A,B)
 
-T2LI: Theorem SyncD(A, B) AND Fifo1(A, C1) AND Sync(B, C2) IMPLIES 
-Tle(C2, C1) and Tle(C1, next(C2))
+T2LI: Theorem SyncD(A, B) AND Fifo1(A, C1) AND Sync(B, C2) IMPLIES Tle(C2, C1) and Tle(C1, next(C2))
 
 R3LI: Theorem FORALL (A,C,D:TD): 
 (EXISTS B: Fifo1(A,B) & Sync(B, C) & Sync(B, D)) IMPLIES 
@@ -149,25 +152,16 @@ SyncD(F,G)) IMPLIES
 
 ordering: THEOREM Sync(A,C) & SyncD(A,B) & Fifo1(B,C) IMPLIES Teq(A,C) & Tle(B,C)
 
-R4: Theorem FORALL (A,B,C:TD): 
-(EXISTS D: Fifo1(A,D) & Sync(D, B) & Sync(D, C)) IMPLIES 
- (EXISTS D,E,F,G,H: Sync(A, D) & Sync(D,E) & Sync(E,F) & Fifo1(E,G) & 
-Fifo1(F,H) & SyncD(G,H) & Sync(A,B) & Sync(H,C))
-
 gn: THEOREM FORALL (n:nat): Fifon(s1, s2)(n+1) IMPLIES Tle(s1, s2) and Deq(s1,s2)
 
 g1: THEOREM Fifon(s1,s2)(1) = Fifo1(s1,s2)
 
 
-sequencer(A, G):bool= FORALL(B,C,D,E,F:TD, e:Data, n:nat): 
-Fifo1e(A,B)(e)(n) & Sync(B,E) & Fifo1(B,C) &
-Sync(C,F) & Fifo1(C,D) & Sync(D, G) & Sync(D,A)
 
-seq: THEoREM sequencer(A,G) IMPLIES Tle(G, next(E)) and Tle(E,F) & Tle(F,G) & Deq(E,F) and Deq(F,G)
 
 End reo
 
-$$$reo.prf
+$$$reo1.prf
 (reo
  (lessp_TCC1 0
   (lessp_TCC1-1 nil 3704523468
@@ -370,16 +364,14 @@ $$$reo.prf
    ("" (skosimp)
     (("" (expand "Sync")
       (("" (expand "Fifo1")
-        (("" (expand "next")
-          (("" (expand "suffix")
-            (("" (expand "Teq")
-              (("" (expand "Tle")
-                (("" (expand "Deq")
-                  (("" (flatten)
-                    (("" (split)
-                      (("1" (propax) nil nil) ("2" (propax) nil nil)
-                       ("3" (propax) nil nil))
-                      nil))
+        (("" (expand "Teq")
+          (("" (expand "Deq")
+            (("" (expand "Tle")
+              (("" (expand "next")
+                (("" (flatten)
+                  (("" (split)
+                    (("1" (assert) nil nil) ("2" (propax) nil nil)
+                     ("3" (assert) nil nil))
                     nil))
                   nil))
                 nil))
@@ -389,11 +381,9 @@ $$$reo.prf
         nil))
       nil))
     nil)
-   ((Fifo1 const-decl "bool" reo nil)
-    (suffix const-decl "sequence[Data]" reo nil)
-    (Tle const-decl "bool" reo nil) (Deq const-decl "bool" reo nil)
-    (Teq const-decl "bool" reo nil) (next const-decl "TD" reo nil)
-    (Sync const-decl "bool" reo nil))
+   ((Fifo1 const-decl "bool" reo nil) (Deq const-decl "bool" reo nil)
+    (next const-decl "TD" reo nil) (Tle const-decl "bool" reo nil)
+    (Teq const-decl "bool" reo nil) (Sync const-decl "bool" reo nil))
    shostak))
  (fto 0
   (fto-1 nil 3717128651
@@ -427,7 +417,8 @@ $$$reo.prf
               (("" (flatten)
                 (("" (split)
                   (("1" (assert) nil nil) ("2" (assert) nil nil)
-                   ("3" (assert) nil nil) ("4" (assert) nil nil))
+                   ("3" (assert) nil nil) ("4" (assert) nil nil)
+                   ("5" (assert) nil nil))
                   nil))
                 nil))
               nil))
@@ -450,8 +441,7 @@ $$$reo.prf
               (("" (assert)
                 (("" (flatten)
                   (("" (split)
-                    (("1" (assert) nil nil) ("2" (assert) nil nil)
-                     ("3" (assert) nil nil))
+                    (("1" (assert) nil nil) ("2" (assert) nil nil))
                     nil))
                   nil))
                 nil))
@@ -579,6 +569,185 @@ $$$reo.prf
      nil)
     (posint_plus_nnint_is_posint application-judgement "posint"
      integers nil))
+   shostak))
+ (ex521 0
+  (ex521-1 nil 3724710986
+   ("" (induct "n")
+    (("1" (skosimp)
+      (("1" (expand "Lossysync")
+        (("1" (expand "Sync")
+          (("1" (expand "SyncD")
+            (("1" (expand "Teq")
+              (("1" (expand "Deq")
+                (("1" (expand "nth")
+                  (("1" (expand "next")
+                    (("1" (expand "suffix")
+                      (("1" (flatten) (("1" (assert) nil nil)) nil))
+                      nil))
+                    nil))
+                  nil))
+                nil))
+              nil))
+            nil))
+          nil))
+        nil))
+      nil)
+     ("2" (skosimp*)
+      (("2" (inst -1 "A!1" "B!1" "C!1" "D!1" "E!1" "F!1" "G!1")
+        (("2" (expand "Sync")
+          (("2" (expand "Lossysync")
+            (("2" (expand "SyncD")
+              (("2" (expand "next")
+                (("2" (expand "nth")
+                  (("2" (expand "suffix")
+                    (("2" (expand "Teq")
+                      (("2" (expand "Deq")
+                        (("2" (assert)
+                          (("2" (flatten)
+                            (("2" (split)
+                              (("1" (propax) nil nil)
+                               ("2" (propax) nil nil)
+                               ("3" (assert) nil nil)
+                               ("4" (assert) nil nil)
+                               ("5" (propax) nil nil)
+                               ("6" (propax) nil nil)
+                               ("7" (propax) nil nil)
+                               ("8" (propax) nil nil)
+                               ("9" (propax) nil nil)
+                               ("10" (propax) nil nil)
+                               ("11" (propax) nil nil)
+                               ("12" (propax) nil nil))
+                              nil))
+                            nil))
+                          nil))
+                        nil))
+                      nil))
+                    nil))
+                  nil))
+                nil))
+              nil))
+            nil))
+          nil))
+        nil))
+      nil))
+    nil)
+   ((posint_plus_nnint_is_posint application-judgement "posint"
+     integers nil)
+    (nth const-decl "TD" reo nil)
+    (suffix const-decl "sequence[Data]" reo nil)
+    (next const-decl "TD" reo nil) (Deq const-decl "bool" reo nil)
+    (nnint_plus_posint_is_posint application-judgement "posint"
+     integers nil)
+    (nat_induction formula-decl nil naturalnumbers nil)
+    (Teq const-decl "bool" reo nil)
+    (OR const-decl "[bool, bool -> bool]" booleans nil)
+    (SyncD const-decl "bool" reo nil)
+    (Lossysync inductive-decl "bool" reo nil)
+    (Sync const-decl "bool" reo nil)
+    (AND const-decl "[bool, bool -> bool]" booleans nil)
+    (IMPLIES const-decl "[bool, bool -> bool]" booleans nil)
+    (TD type-eq-decl nil reo nil) (Time type-eq-decl nil reo nil)
+    (> const-decl "bool" reals nil)
+    (nonneg_real nonempty-type-eq-decl nil real_types nil)
+    (sequence type-eq-decl nil sequences nil)
+    (Data nonempty-type-decl nil reo nil)
+    (pred type-eq-decl nil defined_types nil)
+    (nat nonempty-type-eq-decl nil naturalnumbers nil)
+    (>= const-decl "bool" reals nil)
+    (bool nonempty-type-eq-decl nil booleans nil)
+    (int nonempty-type-eq-decl nil integers nil)
+    (integer_pred const-decl "[rational -> boolean]" integers nil)
+    (rational nonempty-type-from-decl nil rationals nil)
+    (rational_pred const-decl "[real -> boolean]" rationals nil)
+    (real nonempty-type-from-decl nil reals nil)
+    (real_pred const-decl "[number_field -> boolean]" reals nil)
+    (number_field nonempty-type-from-decl nil number_fields nil)
+    (number_field_pred const-decl "[number -> boolean]" number_fields
+     nil)
+    (boolean nonempty-type-decl nil booleans nil)
+    (number nonempty-type-decl nil numbers nil))
+   shostak))
+ (ex52new 0
+  (ex52new-1 nil 3724489534
+   ("" (induct "n")
+    (("1" (skosimp)
+      (("1" (expand "Sync")
+        (("1" (expand "Lossysync")
+          (("1" (expand "SyncD")
+            (("1" (expand "next")
+              (("1" (expand "suffix")
+                (("1" (expand "Teq")
+                  (("1" (expand "Deq")
+                    (("1" (flatten)
+                      (("1" (split)
+                        (("1" (assert) nil nil) ("2" (assert) nil nil))
+                        nil))
+                      nil))
+                    nil))
+                  nil))
+                nil))
+              nil))
+            nil))
+          nil))
+        nil))
+      nil)
+     ("2" (skosimp*)
+      (("2" (inst -1 "A!1" "B!1" "C!1" "D!1" "E!1" "F!1" "G!1")
+        (("2" (expand "Lossysync")
+          (("2" (expand "Sync")
+            (("2" (expand "SyncD")
+              (("2" (expand "next")
+                (("2" (expand "suffix")
+                  (("2" (expand "nth")
+                    (("2" (expand "Teq")
+                      (("2" (expand "Deq")
+                        (("2" (flatten) (("2" (assert) nil nil)) nil))
+                        nil))
+                      nil))
+                    nil))
+                  nil))
+                nil))
+              nil))
+            nil))
+          nil))
+        nil))
+      nil))
+    nil)
+   ((posint_plus_nnint_is_posint application-judgement "posint"
+     integers nil)
+    (nth const-decl "TD" reo nil) (next const-decl "TD" reo nil)
+    (Deq const-decl "bool" reo nil)
+    (suffix const-decl "sequence[Data]" reo nil)
+    (nnint_plus_posint_is_posint application-judgement "posint"
+     integers nil)
+    (nat_induction formula-decl nil naturalnumbers nil)
+    (Teq const-decl "bool" reo nil)
+    (OR const-decl "[bool, bool -> bool]" booleans nil)
+    (SyncD const-decl "bool" reo nil)
+    (Lossysync inductive-decl "bool" reo nil)
+    (Sync const-decl "bool" reo nil)
+    (AND const-decl "[bool, bool -> bool]" booleans nil)
+    (IMPLIES const-decl "[bool, bool -> bool]" booleans nil)
+    (TD type-eq-decl nil reo nil) (Time type-eq-decl nil reo nil)
+    (> const-decl "bool" reals nil)
+    (nonneg_real nonempty-type-eq-decl nil real_types nil)
+    (sequence type-eq-decl nil sequences nil)
+    (Data nonempty-type-decl nil reo nil)
+    (pred type-eq-decl nil defined_types nil)
+    (nat nonempty-type-eq-decl nil naturalnumbers nil)
+    (>= const-decl "bool" reals nil)
+    (bool nonempty-type-eq-decl nil booleans nil)
+    (int nonempty-type-eq-decl nil integers nil)
+    (integer_pred const-decl "[rational -> boolean]" integers nil)
+    (rational nonempty-type-from-decl nil rationals nil)
+    (rational_pred const-decl "[real -> boolean]" rationals nil)
+    (real nonempty-type-from-decl nil reals nil)
+    (real_pred const-decl "[number_field -> boolean]" reals nil)
+    (number_field nonempty-type-from-decl nil number_fields nil)
+    (number_field_pred const-decl "[number -> boolean]" number_fields
+     nil)
+    (boolean nonempty-type-decl nil booleans nil)
+    (number nonempty-type-decl nil numbers nil))
    shostak))
  (lemma7 0
   (lemma7-1 nil 3704464439
@@ -1023,5 +1192,101 @@ $$$reo.prf
     (suffix const-decl "sequence[Data]" reo nil)
     (next const-decl "TD" reo nil) (Deq const-decl "bool" reo nil)
     (sequencer const-decl "bool" reo nil))
-   shostak)))
-
+   shostak))
+ (seq1 0
+  (seq1-1 nil 3724711552
+   ("" (skosimp)
+    (("" (expand "sequencer")
+      (("" (expand "Fifo1e")
+        (("" (expand "Fifo1")
+          (("" (expand "Sync")
+            (("" (expand "Tle")
+              (("" (expand "Teq")
+                (("" (expand "Deq")
+                  (("" (expand "next")
+                    (("" (assert)
+                      (("" (typepred "<")
+                        (("" (expand "strict_order?")
+                          (("" (expand "irreflexive?")
+                            (("" (expand "transitive?")
+                              ((""
+                                (flatten)
+                                ((""
+                                  (inst?)
+                                  ((""
+                                    (inst?)
+                                    ((""
+                                      (inst?)
+                                      ((""
+                                        (inst?)
+                                        ((""
+                                          (inst?)
+                                          ((""
+                                            (inst?)
+                                            ((""
+                                              (inst?)
+                                              ((""
+                                                (assert)
+                                                ((""
+                                                  (split)
+                                                  (("1"
+                                                    (propax)
+                                                    nil
+                                                    nil)
+                                                   ("2"
+                                                    (split)
+                                                    (("1"
+                                                      (assert)
+                                                      (("1"
+                                                        (grind)
+                                                        (("1"
+                                                          (grind)
+                                                          (("1"
+                                                            (postpone)
+                                                            nil
+                                                            nil))
+                                                          nil))
+                                                        nil))
+                                                      nil)
+                                                     ("2"
+                                                      (postpone)
+                                                      nil
+                                                      nil)
+                                                     ("3"
+                                                      (postpone)
+                                                      nil
+                                                      nil)
+                                                     ("4"
+                                                      (postpone)
+                                                      nil
+                                                      nil)
+                                                     ("5"
+                                                      (postpone)
+                                                      nil
+                                                      nil))
+                                                    nil))
+                                                  nil))
+                                                nil))
+                                              nil))
+                                            nil))
+                                          nil))
+                                        nil))
+                                      nil))
+                                    nil))
+                                  nil))
+                                nil))
+                              nil))
+                            nil))
+                          nil))
+                        nil))
+                      nil))
+                    nil))
+                  nil))
+                nil))
+              nil))
+            nil))
+          nil))
+        nil))
+      nil))
+    nil)
+   nil shostak)))
